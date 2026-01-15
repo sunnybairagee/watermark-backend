@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 app = Flask(__name__)
@@ -10,7 +10,10 @@ def home():
 
 @app.route("/remove-watermark", methods=["POST"])
 def remove_watermark():
-    return jsonify({
-        "status": "ok",
-        "message": "Test watermark removal successful"
-    })
+    data = request.json
+    items = data["items"]
+    return {"status": "ok"}
+    # return jsonify({
+    #     "status": "ok",
+    #     "message": "Test watermark removal successful"
+    # })
