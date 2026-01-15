@@ -1,4 +1,6 @@
-app = Flask(__name__)
+from flask import Flask, jsonify
+
+app = flask(__name__)
 
 @app.route("/")
 def home():
@@ -10,6 +12,3 @@ def remove_watermark():
         "status": "ok",
         "message": "Test watermark removal successful"
     })
-
-if __name__ == "__main__":
-    app.run()
