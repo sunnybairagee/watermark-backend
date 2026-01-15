@@ -1,8 +1,10 @@
 from flask import Flask, request, jsonify, make_response, send_from_directory
 from PIL import Image, ImageFilter
 import os
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -110,7 +112,7 @@ def process_coordinates():
             "status": "processed",
             "file_type": "image",
             "output_file": output_name,
-            "download_url": "https://" + request.host + "/download/" + output_name
+            "download_url": request.url_root + "download/" + output_name
         }), 200
 
     # 🔹 video (later)
