@@ -10,9 +10,11 @@ def home():
 
 @app.route("/remove-watermark", methods=["POST"])
 def remove_watermark():
-    data = request.json
-    items = data["items"]
-    return {"status": "ok"}
+    data = request.get_json()
+    return jsonify({
+        "Status": "Ok",
+        "Coordinates": data
+    })
     # return jsonify({
     #     "status": "ok",
     #     "message": "Test watermark removal successful"
