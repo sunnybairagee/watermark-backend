@@ -20,6 +20,47 @@ def add_cors_headers(response):
 def home():
     return "Backend running OK"
 
+from werkzeug.utils import secure_filename
+
+ALLOWED_EXTENSIONS = {
+    "png", "jpg", "jpeg", "webp",
+    "mp4", "mov", "webm"
+}
+
+def allowed_file(filename):
+    return "." in filename and \
+           filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+@app.route("/upload-file", methods=["POST", "OPTIONS"])
+def upload_file():
+
+    # preflight
+    if request.method == "OPTIONS":
+        return make_response("", 200)
+
+    if "file" not in request.files:
+        return jsonify({"error": "No file part"}), 400
+
+    file = request.files["file"]
+
+    if file.filename == "":
+        return jsonify({"error": "Empty filename"}), 400
+
+    if not allowed_file(file.filename):
+        return jsonify({"error": "File type not allowed"}), 400
+
+    filename = secure_filename(file.filename)
+    save_path = os.path.join(UPLOAD_DIR, filename)
+
+    file.save(save_path)
+
+    return jsonify({
+        "status": "uploaded",
+        "file_name": filename,
+        "file_path": save_path
+    }), 200
+
 
 @app.route("/process", methods=["POST", "OPTIONS"])
 def process_coordinates():
