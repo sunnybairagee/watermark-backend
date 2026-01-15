@@ -1,12 +1,26 @@
+import os
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app)
 
+UPLOAD_FOLDER = "uploads"
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
 @app.route("/")
 def home():
     return "Backend is running successfully"
+
+@app.route("/test-upload-folder", methods=["GET"])
+def test_upload_folder():
+    return {
+        "status": "ok",
+        "upload_folder": app.config["UPLOAD_FOLDER"],
+        "exists": os.path.exists(app.config["UPLOAD_FOLDER"])
+    }
 
 # ---------- Helper: file type detect ----------
 def detect_file_type(filename):
