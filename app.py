@@ -1,10 +1,14 @@
 from flask import Flask, request, jsonify, make_response
+from PIL import Image, ImageFilter
 import os
 
 app = Flask(__name__)
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+PROCESSED_DIR = "processed"
+os.makedirs(PROCESSED_DIR, exist_ok=True)
 
 
 # 🔥 GLOBAL CORS (MOST IMPORTANT)
@@ -65,12 +69,10 @@ def upload_file():
 @app.route("/process", methods=["POST", "OPTIONS"])
 def process_coordinates():
 
-    # 🔥 PRE-FLIGHT HANDLER
     if request.method == "OPTIONS":
         return make_response("", 200)
 
     data = request.get_json(silent=True)
-
     if not data:
         return jsonify({"error": "No JSON received"}), 400
 
@@ -81,15 +83,40 @@ def process_coordinates():
     if not file_name or not file_type or not coordinates:
         return jsonify({"error": "Missing fields"}), 400
 
-    print("FILE:", file_name)
-    print("TYPE:", file_type)
-    print("COORDS:", coordinates)
+    file_path = os.path.join(UPLOAD_DIR, file_name)
 
+    if not os.path.exists(file_path):
+        return jsonify({"error": "File not found"}), 404
+
+    # 🔥 IMAGE BLUR LOGIC
+    if file_type == "image":
+        img = Image.open(file_path).convert("RGB")
+
+        for box in coordinates:
+            x = box["x"]
+            y = box["y"]
+            w = box["w"]
+            h = box["h"]
+
+            region = img.crop((x, y, x + w, y + h))
+            blurred = region.filter(ImageFilter.GaussianBlur(radius=12))
+            img.paste(blurred, (x, y))
+
+        output_name = "blurred_" + file_name
+        output_path = os.path.join(PROCESSED_DIR, output_name)
+        img.save(output_path)
+
+        return jsonify({
+            "status": "processed",
+            "file_type": "image",
+            "output_file": output_name,
+            "output_path": output_path
+        }), 200
+
+    # 🔹 video (later)
     return jsonify({
         "status": "received",
-        "file_name": file_name,
-        "file_type": file_type,
-        "boxes_count": len(coordinates)
+        "message": "Video processing coming next"
     }), 200
 
 
