@@ -1,4 +1,5 @@
 import os
+import json
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
@@ -13,6 +14,58 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 @app.route("/")
 def home():
     return "Backend is running successfully"
+
+@app.route("/upload", methods=["POST"])
+def upload_file():
+    # -------- file --------
+    if "file" not in request.files:
+        return jsonify({
+            "status": "error",
+            "message": "No file received"
+        }), 400
+
+    file = request.files["file"]
+
+    if file.filename == "":
+        return jsonify({
+            "status": "error",
+            "message": "Empty filename"
+        }), 400
+
+    # -------- metadata --------
+    metadata_raw = request.form.get("metadata")
+    if not metadata_raw:
+        return jsonify({
+            "status": "error",
+            "message": "No metadata received"
+        }), 400
+
+    metadata = json.loads(metadata_raw)
+
+    file_name = metadata.get("file_name")
+    coordinates = metadata.get("coordinates", [])
+
+    # -------- file type detect --------
+    ext = file_name.lower().split(".")[-1]
+    if ext in ["jpg", "jpeg", "png", "webp"]:
+        file_type = "image"
+    elif ext in ["mp4", "mov", "avi", "mkv", "webm"]:
+        file_type = "video"
+    else:
+        file_type = "unknown"
+
+    # -------- save file --------
+    save_path = os.path.join(app.config["UPLOAD_FOLDER"], file_name)
+    file.save(save_path)
+
+    # -------- response (alert friendly) --------
+    return jsonify({
+        "status": "success",
+        "saved_as": file_name,
+        "file_type": file_type,
+        "total_boxes": len(coordinates),
+        "upload_path": save_path
+    })
 
 @app.route("/test-upload-folder", methods=["GET"])
 def test_upload_folder():
