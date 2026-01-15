@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, make_response
+from flask import Flask, request, jsonify, make_response, send_from_directory
 from PIL import Image, ImageFilter
 import os
 
@@ -110,7 +110,7 @@ def process_coordinates():
             "status": "processed",
             "file_type": "image",
             "output_file": output_name,
-            "output_path": output_path
+            "download_url": f"/download/{output_name}"
         }), 200
 
     # 🔹 video (later)
@@ -118,6 +118,14 @@ def process_coordinates():
         "status": "received",
         "message": "Video processing coming next"
     }), 200
+
+@app.route("/download/<filename>")
+def download_file(filename):
+    return send_from_directory(
+        PROCESSED_DIR,
+        filename,
+        as_attachment=True
+    )
 
 
 if __name__ == "__main__":
