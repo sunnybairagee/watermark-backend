@@ -1,128 +1,61 @@
-import os
-import json
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+import os
 
 app = Flask(__name__)
 CORS(app)
 
-UPLOAD_FOLDER = "uploads"
-app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+UPLOAD_DIR = "uploads"
+PROCESSED_DIR = "processed"
 
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(PROCESSED_DIR, exist_ok=True)
+
 
 @app.route("/")
 def home():
-    return "Backend is running successfully"
+    return "Backend running OK"
 
-@app.route("/upload", methods=["POST"])
-def upload_file():
-    # -------- file --------
-    if "file" not in request.files:
-        return jsonify({
-            "status": "error",
-            "message": "No file received"
-        }), 400
 
-    file = request.files["file"]
-
-    if file.filename == "":
-        return jsonify({
-            "status": "error",
-            "message": "Empty filename"
-        }), 400
-
-    # -------- metadata --------
-    metadata_raw = request.form.get("metadata")
-    if not metadata_raw:
-        return jsonify({
-            "status": "error",
-            "message": "No metadata received"
-        }), 400
-
-    metadata = json.loads(metadata_raw)
-
-    file_name = metadata.get("file_name")
-    coordinates = metadata.get("coordinates", [])
-
-    # -------- file type detect --------
-    ext = file_name.lower().split(".")[-1]
-    if ext in ["jpg", "jpeg", "png", "webp"]:
-        file_type = "image"
-    elif ext in ["mp4", "mov", "avi", "mkv", "webm"]:
-        file_type = "video"
-    else:
-        file_type = "unknown"
-
-    # -------- save file --------
-    save_path = os.path.join(app.config["UPLOAD_FOLDER"], file_name)
-    file.save(save_path)
-
-    # -------- response (alert friendly) --------
-    return jsonify({
-        "status": "success",
-        "saved_as": file_name,
-        "file_type": file_type,
-        "total_boxes": len(coordinates),
-        "upload_path": save_path
-    })
-
-@app.route("/test-upload-folder", methods=["GET"])
-def test_upload_folder():
-    return {
-        "status": "ok",
-        "upload_folder": app.config["UPLOAD_FOLDER"],
-        "exists": os.path.exists(app.config["UPLOAD_FOLDER"])
-    }
-
-# ---------- Helper: file type detect ----------
-def detect_file_type(filename):
-    image_ext = ["jpg", "jpeg", "png", "webp"]
-    video_ext = ["mp4", "mov", "avi", "mkv", "webm"]
-
-    ext = filename.lower().split(".")[-1]
-
-    if ext in image_ext:
-        return "image"
-    elif ext in video_ext:
-        return "video"
-    else:
-        return "unknown"
-
-# ---------- API ----------
-@app.route("/remove-watermark", methods=["POST"])
-def receive_coordinates():
+# 🔥 MAIN ENDPOINT (frontend yahin hit karega)
+@app.route("/process", methods=["POST"])
+def process_coordinates():
     data = request.get_json()
 
-    # ---- frontend se expected ----
+    # 1️⃣ Basic validation
+    if not data:
+        return jsonify({"error": "No JSON received"}), 400
+
     file_name = data.get("file_name")
-    coordinates = data.get("coordinates")  # list of boxes
+    file_type = data.get("file_type")
+    coordinates = data.get("coordinates")
 
-    if not file_name or not coordinates:
+    if not file_name or not file_type or not coordinates:
+        return jsonify({"error": "Missing fields"}), 400
+
+    if not isinstance(coordinates, list):
+        return jsonify({"error": "Coordinates must be list"}), 400
+
+    # 2️⃣ Debug print (Render logs)
+    print("FILE:", file_name)
+    print("TYPE:", file_type)
+    print("COORDS:", coordinates)
+
+    # 3️⃣ Check file exists (important)
+    file_path = os.path.join(UPLOAD_DIR, file_name)
+    if not os.path.exists(file_path):
         return jsonify({
-            "status": "error",
-            "message": "file_name or coordinates missing"
-        }), 400
+            "error": "File not found on server",
+            "expected_path": file_path
+        }), 404
 
-    file_type = detect_file_type(file_name)
+    # 4️⃣ TEMP: processing placeholder
+    # (yahin baad me OpenCV / FFmpeg logic aayega)
 
-    # ---- response for alert box ----
     return jsonify({
-        "status": "success",
+        "status": "received",
         "file_name": file_name,
         "file_type": file_type,
-        "total_boxes": len(coordinates),
-        "coordinates_received": coordinates
+        "boxes_count": len(coordinates),
+        "message": "Coordinates received successfully"
     })
-
-# @app.route("/remove-watermark", methods=["POST"])
-# def remove_watermark():
-#     data = request.get_json()
-#     return jsonify({
-#         "Status": "Ok",
-#         "Coordinates": data
-#     })
-    # return jsonify({
-    #     "status": "ok",
-    #     "message": "Test watermark removal successful"
-    # })
