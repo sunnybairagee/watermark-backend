@@ -1,9 +1,15 @@
-from flask import Flask, jsonify, request
-from flask_cors import CORS
+from flask import Flask, jsonify, request, make_response
 import os
 
 app = Flask(__name__)
-CORS(app, resources={r"/": {"origins": ""}})
+
+@app.after_request
+def add_cors_headers(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return response
+
 
 UPLOAD_DIR = "uploads"
 PROCESSED_DIR = "processed"
@@ -16,14 +22,13 @@ os.makedirs(PROCESSED_DIR, exist_ok=True)
 def home():
     return "Backend running OK"
 
-
 # 🔥 MAIN ENDPOINT (frontend yahin hit karega)
 @app.route("/process", methods=["POST", "OPTIONS"])
 def process_coordinates():
 
-    # 🔥 Preflight request handle
+    # Preflight request
     if request.method == "OPTIONS":
-        return jsonify({"status": "ok"}), 200
+        return make_response("", 200)
 
     data = request.get_json()
 
