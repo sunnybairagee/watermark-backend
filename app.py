@@ -110,7 +110,7 @@ def process_coordinates():
             "status": "processed",
             "file_type": "image",
             "output_file": output_name,
-            "download_url": f"/download/{output_name}"
+            "download_url": request.host_url + "download/" + output_name
         }), 200
 
     # 🔹 video (later)
