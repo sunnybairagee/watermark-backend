@@ -89,6 +89,28 @@ def get_video_duration_ms(video_path):
     duration_sec = float(result.stdout.decode().strip())
     return int(duration_sec * 1000)
 
+def process_image_mobile(job_id, input_path, box, output_path):
+    try:
+        jobs[job_id]["status"] = "processing"
+        jobs[job_id]["progress"] = 10
+
+        img = Image.open(input_path)
+        x, y, w, h = box["x"], box["y"], box["w"], box["h"]
+
+        region = img.crop((x, y, x + w, y + h))
+        blurred = region.filter(ImageFilter.GaussianBlur(15))
+        img.paste(blurred, (x, y))
+
+        img.save(output_path, "JPEG")
+
+        jobs[job_id]["progress"] = 100
+        jobs[job_id]["status"] = "done"
+        jobs[job_id]["output_file"] = os.path.basename(output_path)
+
+    except Exception as e:
+        jobs[job_id]["status"] = "error"
+        jobs[job_id]["message"] = str(e)
+
 def process_video_mobile(job_id, file_path, box, output_path):
     try:
         jobs[job_id]["status"] = "processing"
@@ -155,7 +177,11 @@ def process_mobile():
     box = coordinates[0]
 
     input_path = os.path.join(UPLOAD_DIR, file_name)
-    output_name = f"mobile_blur_{uuid.uuid4().hex}.mp4"
+    if file_type == "image":
+        output_name = f"blurred_{uuid.uuid4().hex}.jpg"
+    else:
+        output_name = f"mobile_blur_{uuid.uuid4().hex}.mp4"
+    # output_name = f"mobile_blur_{uuid.uuid4().hex}.mp4"
     output_path = os.path.join(PROCESSED_DIR, output_name)
 
     job_id = uuid.uuid4().hex
@@ -166,10 +192,17 @@ def process_mobile():
         "output_file": None
     }
 
-    thread = threading.Thread(
-        target=process_video_mobile,
-        args=(job_id, input_path, box, output_path)
-    )
+    if file_type == "image":
+        thread = threading.Thread(
+            target=process_image_mobile,
+            args=(job_id, input_path, box, output_path)
+        )
+    else:
+        thread = threading.Thread(
+            target=process_video_mobile,
+            args=(job_id, input_path, box, output_path)
+        )
+    
     thread.start()
 
     return jsonify({
