@@ -118,20 +118,40 @@ def process_coordinates():
         }), 200
 
     # inside /process route, image block ke baad
-    
+
     if file_type == "video":
         input_video = os.path.join(UPLOAD_DIR, file_name)
-    
-        output_name = f"processed_{uuid.uuid4().hex}.mp4"
+        output_name = f"blurred_{uuid.uuid4().hex}.mp4"
         output_path = os.path.join(PROCESSED_DIR, output_name)
     
-        # 🔥 TEMP FFmpeg COMMAND (no blur yet)
-        # Just copy video (fast, testing purpose)
+        # 🔹 Build blur filters for each box
+        blur_filters = []
+        for i, box in enumerate(coordinates):
+            x = box["x"]
+            y = box["y"]
+            w = box["w"]
+            h = box["h"]
+    
+            blur_filters.append(
+                f"[0:v]crop={w}:{h}:{x}:{y},boxblur=10:2[blur{i}]"
+            )
+    
+        # 🔹 Overlay blurred parts back
+        overlay_chain = "[0:v]"
+        for i in range(len(coordinates)):
+            overlay_chain += f"[blur{i}]overlay={coordinates[i]['x']}:{coordinates[i]['y']}"
+    
+        filter_complex = ";".join(blur_filters) + ";" + overlay_chain
+    
         cmd = [
             "ffmpeg",
             "-y",
             "-i", input_video,
-            "-c", "copy",
+            "-filter_complex", filter_complex,
+            "-map", "0:a?",
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-crf", "23",
             output_path
         ]
     
