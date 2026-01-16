@@ -214,7 +214,6 @@ def process_video_mobile(job_id, file_path, box, output_path):
         jobs[job_id]["status"] = "error"
         jobs[job_id]["message"] = str(e)
 
-file_type = data.get("file_type")
 @app.route("/process-mobile", methods=["POST", "OPTIONS"])
 def process_mobile():
     if request.method == "OPTIONS":
