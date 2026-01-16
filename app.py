@@ -126,14 +126,23 @@ def process_coordinates():
         output_name = f"blurred_{uuid.uuid4().hex}.mp4"
         output_path = os.path.join(PROCESSED_DIR, output_name)
     
-        box = coordinates[0]   # 🔥 TEMP: only first box
+        box = coordinates[0]   # single box (stable)
         x, y, w, h = box["x"], box["y"], box["w"], box["h"]
+    
+        filter_complex = (
+            f"[0:v]split=2[base][tmp];"
+            f"[tmp]crop={w}:{h}:{x}:{y},boxblur=10:2[blur];"
+            f"[base][blur]overlay={x}:{y}"
+        )
     
         cmd = [
             "ffmpeg", "-y",
             "-i", input_video,
-            "-vf", f"drawbox=x={x}:y={y}:w={w}:h={h}:color=black@1:t=fill,boxblur=10:2",
-            "-c:a", "copy",
+            "-filter_complex", filter_complex,
+            "-map", "0:a?",
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-crf", "23",
             output_path
         ]
     
