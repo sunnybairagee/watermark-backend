@@ -4,8 +4,10 @@ import os
 import subprocess
 import uuid
 from werkzeug.middleware.proxy_fix import ProxyFix
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app, resources={r"/": {"origins": ""}})
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 UPLOAD_DIR = "uploads"
@@ -124,38 +126,25 @@ def process_coordinates():
         output_name = f"blurred_{uuid.uuid4().hex}.mp4"
         output_path = os.path.join(PROCESSED_DIR, output_name)
     
-        # 🔹 Build blur filters for each box
-        blur_filters = []
-        for i, box in enumerate(coordinates):
-            x = box["x"]
-            y = box["y"]
-            w = box["w"]
-            h = box["h"]
-    
-            blur_filters.append(
-                f"[0:v]crop={w}:{h}:{x}:{y},boxblur=10:2[blur{i}]"
-            )
-    
-        # 🔹 Overlay blurred parts back
-        overlay_chain = "[0:v]"
-        for i in range(len(coordinates)):
-            overlay_chain += f"[blur{i}]overlay={coordinates[i]['x']}:{coordinates[i]['y']}"
-    
-        filter_complex = ";".join(blur_filters) + ";" + overlay_chain
+        box = coordinates[0]   # 🔥 TEMP: only first box
+        x, y, w, h = box["x"], box["y"], box["w"], box["h"]
     
         cmd = [
-            "ffmpeg",
-            "-y",
+            "ffmpeg", "-y",
             "-i", input_video,
-            "-filter_complex", filter_complex,
-            "-map", "0:a?",
-            "-c:v", "libx264",
-            "-preset", "veryfast",
-            "-crf", "23",
+            "-vf", f"drawbox=x={x}:y={y}:w={w}:h={h}:color=black@1:t=fill,boxblur=10:2",
+            "-c:a", "copy",
             output_path
         ]
     
-        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    
+        if not os.path.exists(output_path):
+            return jsonify({
+                "status": "error",
+                "message": "Video processing failed",
+                "ffmpeg_error": result.stderr.decode()
+            }), 500
     
         return jsonify({
             "status": "processed",
