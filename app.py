@@ -182,21 +182,21 @@ def process_video_mobile(job_id, file_path, box, output_path):
         save_jobs(jobs)
 
         for line in process.stdout:
-    line = line.strip()
-
-        if line.startswith("out_time_ms="):
-            try:
-                out_ms = int(line.split("=")[1])
+            line = line.strip()
     
-                if total_duration > 0:
-                    percent = min(int(out_ms * 100 / total_duration), 99)
-    
-                    with jobs_lock:
-                        jobs[job_id]["progress"] = percent
-                        save_jobs(jobs)
-    
-            except Exception:
-                pass  # ignore bad ffmpeg lines
+            if line.startswith("out_time_ms="):
+                try:
+                    out_ms = int(line.split("=")[1])
+        
+                    if total_duration > 0:
+                        percent = min(int(out_ms * 100 / total_duration), 99)
+        
+                        with jobs_lock:
+                            jobs[job_id]["progress"] = percent
+                            save_jobs(jobs)
+        
+                except Exception:
+                    pass  # ignore bad ffmpeg lines
 
         process.wait()
         save_jobs(jobs)
