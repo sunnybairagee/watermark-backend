@@ -168,6 +168,7 @@ def process_mobile():
 
     data = request.get_json()
     file_name = data.get("file_name")
+    file_type = data.get("file_type")
     coordinates = data.get("coordinates")
 
     if not file_name or not coordinates:
