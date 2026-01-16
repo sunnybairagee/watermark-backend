@@ -1,6 +1,7 @@
 from flask_cors import CORS
 from flask import Flask, request, jsonify, make_response, send_from_directory
 from PIL import Image, ImageFilter
+import json
 import threading
 import time
 import os
@@ -8,7 +9,27 @@ import subprocess
 import uuid
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-jobs = {}
+JOBS_FILE = "jobs.json"
+jobs_lock = threading.Lock()
+
+
+def load_jobs():
+    if not os.path.exists(JOBS_FILE):
+        return {}
+    try:
+        with open(JOBS_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return {}
+
+
+def save_jobs(jobs):
+    with open(JOBS_FILE, "w") as f:
+        json.dump(jobs, f)
+
+
+# 🔥 app start hote hi jobs load kar lo
+jobs = load_jobs()
 
 app = Flask(__name__)
 CORS(app, resources={r"/": {"origins": ""}})
@@ -92,20 +113,27 @@ def get_video_duration_ms(video_path):
 def process_image_mobile(job_id, input_path, box, output_path):
     try:
         jobs[job_id]["status"] = "processing"
+        save_jobs(jobs)
         jobs[job_id]["progress"] = 10
+        save_jobs(jobs)
 
         img = Image.open(input_path)
         x, y, w, h = box["x"], box["y"], box["w"], box["h"]
+        save_jobs(jobs)
 
         region = img.crop((x, y, x + w, y + h))
         blurred = region.filter(ImageFilter.GaussianBlur(15))
         img.paste(blurred, (x, y))
+        save_jobs(jobs)
 
         img.save(output_path, "JPEG")
+        save_jobs(jobs)
 
         jobs[job_id]["progress"] = 100
+        save_jobs(jobs)
         jobs[job_id]["status"] = "done"
         jobs[job_id]["output_file"] = os.path.basename(output_path)
+        save_jobs(jobs)
 
     except Exception as e:
         jobs[job_id]["status"] = "error"
@@ -115,10 +143,13 @@ def process_video_mobile(job_id, file_path, box, output_path):
     try:
         jobs[job_id]["status"] = "processing"
         jobs[job_id]["progress"] = 0
+        save_jobs(jobs)
 
         total_duration = get_video_duration_ms(file_path)
+        save_jobs(jobs)
 
         x, y, w, h = box["x"], box["y"], box["w"], box["h"]
+        save_jobs(jobs)
 
         cmd = [
             "ffmpeg", "-y",
@@ -134,6 +165,7 @@ def process_video_mobile(job_id, file_path, box, output_path):
             "-progress", "pipe:1",
             output_path
         ]
+        save_jobs(jobs)
 
         process = subprocess.Popen(
             cmd,
@@ -141,6 +173,7 @@ def process_video_mobile(job_id, file_path, box, output_path):
             stderr=subprocess.STDOUT,
             text=True
         )
+        save_jobs(jobs)
 
         for line in process.stdout:
             if "out_time_ms=" in line:
@@ -149,13 +182,16 @@ def process_video_mobile(job_id, file_path, box, output_path):
                 jobs[job_id]["progress"] = percent
 
         process.wait()
+        save_jobs(jobs)
 
         if not os.path.exists(output_path):
             raise Exception("Output file not created")
 
         jobs[job_id]["progress"] = 100
+        save_jobs(jobs)
         jobs[job_id]["status"] = "done"
         jobs[job_id]["output_file"] = os.path.basename(output_path)
+        save_jobs(jobs)
 
     except Exception as e:
         jobs[job_id]["status"] = "error"
@@ -187,11 +223,14 @@ def process_mobile():
 
     job_id = uuid.uuid4().hex
 
-    jobs[job_id] = {
-        "status": "queued",
-        "progress": 0,
-        "output_file": None
-    }
+    with jobs_lock:
+        jobs[job_id] = {
+            "status": "queued",
+            "progress": 0,
+            "output_file": None,
+            "created_at": time.time()
+        }
+        save_jobs(jobs)
 
     if file_type == "image":
         thread = threading.Thread(
@@ -213,10 +252,24 @@ def process_mobile():
 
 @app.route("/progress/<job_id>")
 def get_progress(job_id):
+    jobs = load_jobs()
     job = jobs.get(job_id)
     if not job:
         return jsonify({"error": "Invalid job id"}), 404
     return jsonify(job)
+
+def cleanup_jobs(max_age=3600):  # 1 hour
+    now = time.time()
+    jobs = load_jobs()
+    changed = False
+
+    for jid in list(jobs.keys()):
+        if now - jobs[jid].get("created_at", now) > max_age:
+            del jobs[jid]
+            changed = True
+
+    if changed:
+        save_jobs(jobs)
 
 # Mobile Processing Code ==============================
 
@@ -342,6 +395,7 @@ def download_file(filename):
         as_attachment=True
     )
 
+cleanup_jobs()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
