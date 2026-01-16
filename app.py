@@ -1,6 +1,8 @@
 from flask import Flask, request, jsonify, make_response, send_from_directory
 from PIL import Image, ImageFilter
 import os
+import subprocess
+import uuid
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 app = Flask(__name__)
@@ -115,11 +117,38 @@ def process_coordinates():
             "download_url": request.url_root + "download/" + output_name
         }), 200
 
+    # inside /process route, image block ke baad
+    
+    if file_type == "video":
+        input_video = os.path.join(UPLOAD_DIR, file_name)
+    
+        output_name = f"processed_{uuid.uuid4().hex}.mp4"
+        output_path = os.path.join(PROCESSED_DIR, output_name)
+    
+        # 🔥 TEMP FFmpeg COMMAND (no blur yet)
+        # Just copy video (fast, testing purpose)
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-i", input_video,
+            "-c", "copy",
+            output_path
+        ]
+    
+        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    
+        return jsonify({
+            "status": "processed",
+            "file_type": "video",
+            "output_file": output_name,
+            "download_url": request.url_root + "download/" + output_name
+        }), 200
+
     # 🔹 video (later)
-    return jsonify({
-        "status": "received",
-        "message": "Video processing coming next"
-    }), 200
+    # return jsonify({
+    #     "status": "received",
+    #     "message": "Video processing coming next"
+    # }), 200
 
 @app.route("/download/<filename>")
 def download_file(filename):
