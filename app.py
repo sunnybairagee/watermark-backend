@@ -1,10 +1,10 @@
+from flask_cors import CORS
 from flask import Flask, request, jsonify, make_response, send_from_directory
 from PIL import Image, ImageFilter
 import os
 import subprocess
 import uuid
 from werkzeug.middleware.proxy_fix import ProxyFix
-from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app, resources={r"/": {"origins": ""}})
