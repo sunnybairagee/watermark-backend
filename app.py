@@ -112,32 +112,38 @@ def get_video_duration_ms(video_path):
 
 def process_image_mobile(job_id, input_path, box, output_path):
     try:
-        jobs[job_id]["status"] = "processing"
-        save_jobs(jobs)
-        jobs[job_id]["progress"] = 10
-        save_jobs(jobs)
+        with jobs_lock:
+            jobs[job_id]["progress"] = 10
+            save_jobs(jobs)
 
         img = Image.open(input_path)
         x, y, w, h = box["x"], box["y"], box["w"], box["h"]
-        save_jobs(jobs)
+
+        with jobs_lock:
+            jobs[job_id]["progress"] = 40
+            save_jobs(jobs)
 
         region = img.crop((x, y, x + w, y + h))
         blurred = region.filter(ImageFilter.GaussianBlur(15))
         img.paste(blurred, (x, y))
-        save_jobs(jobs)
+
+        with jobs_lock:
+            jobs[job_id]["progress"] = 80
+            save_jobs(jobs)
 
         img.save(output_path, "JPEG")
-        save_jobs(jobs)
 
-        jobs[job_id]["progress"] = 100
-        save_jobs(jobs)
-        jobs[job_id]["status"] = "done"
-        jobs[job_id]["output_file"] = os.path.basename(output_path)
-        save_jobs(jobs)
+        with jobs_lock:
+            jobs[job_id]["progress"] = 100
+            jobs[job_id]["status"] = "done"
+            jobs[job_id]["output_file"] = os.path.basename(output_path)
+            save_jobs(jobs)
 
     except Exception as e:
-        jobs[job_id]["status"] = "error"
-        jobs[job_id]["message"] = str(e)
+        with jobs_lock:
+            jobs[job_id]["status"] = "error"
+            jobs[job_id]["message"] = str(e)
+            save_jobs(jobs)
 
 def process_video_mobile(job_id, file_path, box, output_path):
     try:
@@ -176,10 +182,21 @@ def process_video_mobile(job_id, file_path, box, output_path):
         save_jobs(jobs)
 
         for line in process.stdout:
-            if "out_time_ms=" in line:
-                out_ms = int(line.strip().split("=")[1])
-                percent = min(int(out_ms * 100 / total_duration), 99)
-                jobs[job_id]["progress"] = percent
+    line = line.strip()
+
+        if line.startswith("out_time_ms="):
+            try:
+                out_ms = int(line.split("=")[1])
+    
+                if total_duration > 0:
+                    percent = min(int(out_ms * 100 / total_duration), 99)
+    
+                    with jobs_lock:
+                        jobs[job_id]["progress"] = percent
+                        save_jobs(jobs)
+    
+            except Exception:
+                pass  # ignore bad ffmpeg lines
 
         process.wait()
         save_jobs(jobs)
@@ -197,6 +214,7 @@ def process_video_mobile(job_id, file_path, box, output_path):
         jobs[job_id]["status"] = "error"
         jobs[job_id]["message"] = str(e)
 
+file_type = data.get("file_type")
 @app.route("/process-mobile", methods=["POST", "OPTIONS"])
 def process_mobile():
     if request.method == "OPTIONS":
