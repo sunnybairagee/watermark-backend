@@ -120,25 +120,43 @@ def process_coordinates():
         }), 200
 
     # inside /process route, image block ke baad
-
     if file_type == "video":
         input_video = os.path.join(UPLOAD_DIR, file_name)
         output_name = f"blurred_{uuid.uuid4().hex}.mp4"
         output_path = os.path.join(PROCESSED_DIR, output_name)
     
-        box = coordinates[0]   # single box (stable)
-        x, y, w, h = box["x"], box["y"], box["w"], box["h"]
+        filter_parts = []
+        overlay_chain = ""
     
-        filter_complex = (
-            f"[0:v]split=2[base][tmp];"
-            f"[tmp]crop={w}:{h}:{x}:{y},boxblur=10:2[blur];"
-            f"[base][blur]overlay={x}:{y}"
-        )
+        # Step 1: base split
+        filter_parts.append("[0:v]split=2[base][tmp0]")
+    
+        # Step 2: blur each box
+        for i, box in enumerate(coordinates):
+            x = box["x"]
+            y = box["y"]
+            w = box["w"]
+            h = box["h"]
+    
+            filter_parts.append(
+                f"[tmp{i}]crop={w}:{h}:{x}:{y},boxblur=10:2[blur{i}]"
+            )
+    
+            if i == 0:
+                overlay_chain = f"[base][blur0]overlay={x}:{y}[out0]"
+            else:
+                overlay_chain += f";[out{i-1}][blur{i}]overlay={x}:{y}[out{i}]"
+    
+            if i + 1 < len(coordinates):
+                filter_parts.append(f"[tmp{i}]copy[tmp{i+1}]")
+    
+        filter_complex = ";".join(filter_parts) + ";" + overlay_chain
     
         cmd = [
             "ffmpeg", "-y",
             "-i", input_video,
             "-filter_complex", filter_complex,
+            "-map", f"[out{len(coordinates)-1}]",
             "-map", "0:a?",
             "-c:v", "libx264",
             "-preset", "veryfast",
@@ -151,7 +169,7 @@ def process_coordinates():
         if not os.path.exists(output_path):
             return jsonify({
                 "status": "error",
-                "message": "Video processing failed",
+                "message": "Video multi-box processing failed",
                 "ffmpeg_error": result.stderr.decode()
             }), 500
     
