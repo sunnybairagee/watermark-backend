@@ -8,7 +8,7 @@ import subprocess
 import uuid
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-job = {}
+jobs = {}
 
 app = Flask(__name__)
 CORS(app, resources={r"/": {"origins": ""}})
