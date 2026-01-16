@@ -153,12 +153,6 @@ def process_coordinates():
             "download_url": request.url_root + "download/" + output_name
         }), 200
 
-    # 🔹 video (later)
-    # return jsonify({
-    #     "status": "received",
-    #     "message": "Video processing coming next"
-    # }), 200
-
 @app.route("/download/<filename>")
 def download_file(filename):
     return send_from_directory(
