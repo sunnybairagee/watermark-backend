@@ -125,38 +125,37 @@ def process_coordinates():
         output_name = f"blurred_{uuid.uuid4().hex}.mp4"
         output_path = os.path.join(PROCESSED_DIR, output_name)
     
-        filter_parts = []
-        overlay_chain = ""
+        filters = []
+        last_video = "base"
     
-        # Step 1: base split
-        filter_parts.append("[0:v]split=2[base][tmp0]")
+        # Start with base video
+        filters.append("[0:v]setpts=PTS-STARTPTS[base]")
     
-        # Step 2: blur each box
         for i, box in enumerate(coordinates):
             x = box["x"]
             y = box["y"]
             w = box["w"]
             h = box["h"]
     
-            filter_parts.append(
-                f"[tmp{i}]crop={w}:{h}:{x}:{y},boxblur=10:2[blur{i}]"
+            # Crop + blur
+            filters.append(
+                f"[{last_video}]crop={w}:{h}:{x}:{y},boxblur=10:2[blur{i}]"
             )
     
-            if i == 0:
-                overlay_chain = f"[base][blur0]overlay={x}:{y}[out0]"
-            else:
-                overlay_chain += f";[out{i-1}][blur{i}]overlay={x}:{y}[out{i}]"
+            # Overlay back
+            filters.append(
+                f"[{last_video}][blur{i}]overlay={x}:{y}[v{i}]"
+            )
     
-            if i + 1 < len(coordinates):
-                filter_parts.append(f"[tmp{i}]copy[tmp{i+1}]")
+            last_video = f"v{i}"
     
-        filter_complex = ";".join(filter_parts) + ";" + overlay_chain
+        filter_complex = ";".join(filters)
     
         cmd = [
             "ffmpeg", "-y",
             "-i", input_video,
             "-filter_complex", filter_complex,
-            "-map", f"[out{len(coordinates)-1}]",
+            "-map", f"[{last_video}]",
             "-map", "0:a?",
             "-c:v", "libx264",
             "-preset", "veryfast",
@@ -169,7 +168,7 @@ def process_coordinates():
         if not os.path.exists(output_path):
             return jsonify({
                 "status": "error",
-                "message": "Video multi-box processing failed",
+                "message": "Video multi-box blur failed",
                 "ffmpeg_error": result.stderr.decode()
             }), 500
     
