@@ -126,10 +126,11 @@ def process_coordinates():
         output_path = os.path.join(PROCESSED_DIR, output_name)
     
         filters = []
-        last_video = "base"
     
-        # Start with base video
+        # Base video
         filters.append("[0:v]setpts=PTS-STARTPTS[base]")
+    
+        last = "base"
     
         for i, box in enumerate(coordinates):
             x = box["x"]
@@ -137,17 +138,17 @@ def process_coordinates():
             w = box["w"]
             h = box["h"]
     
-            # Crop + blur
+            # ALWAYS crop from original video
             filters.append(
-                f"[{last_video}]crop={w}:{h}:{x}:{y},boxblur=10:2[blur{i}]"
+                f"[0:v]crop={w}:{h}:{x}:{y},boxblur=10:2[blur{i}]"
             )
     
-            # Overlay back
+            # Overlay on last output
             filters.append(
-                f"[{last_video}][blur{i}]overlay={x}:{y}[v{i}]"
+                f"[{last}][blur{i}]overlay={x}:{y}[v{i}]"
             )
     
-            last_video = f"v{i}"
+            last = f"v{i}"
     
         filter_complex = ";".join(filters)
     
@@ -155,7 +156,7 @@ def process_coordinates():
             "ffmpeg", "-y",
             "-i", input_video,
             "-filter_complex", filter_complex,
-            "-map", f"[{last_video}]",
+            "-map", f"[{last}]",
             "-map", "0:a?",
             "-c:v", "libx264",
             "-preset", "veryfast",
@@ -163,12 +164,16 @@ def process_coordinates():
             output_path
         ]
     
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        result = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
     
         if not os.path.exists(output_path):
             return jsonify({
                 "status": "error",
-                "message": "Video multi-box blur failed",
+                "message": "FFmpeg failed",
                 "ffmpeg_error": result.stderr.decode()
             }), 500
     
