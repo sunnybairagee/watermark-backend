@@ -1,10 +1,14 @@
 from flask_cors import CORS
 from flask import Flask, request, jsonify, make_response, send_from_directory
 from PIL import Image, ImageFilter
+import threading
+import time
 import os
 import subprocess
 import uuid
 from werkzeug.middleware.proxy_fix import ProxyFix
+
+job = {}
 
 app = Flask(__name__)
 CORS(app, resources={r"/": {"origins": ""}})
@@ -70,6 +74,118 @@ def upload_file():
         "file_name": filename,
         "file_path": save_path
     }), 200
+
+
+# Mobile Processing Code ==============================
+
+def get_video_duration_ms(video_path):
+    cmd = [
+        "ffprobe", "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        video_path
+    ]
+    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    duration_sec = float(result.stdout.decode().strip())
+    return int(duration_sec * 1000)
+
+def process_video_mobile(job_id, file_path, box, output_path):
+    try:
+        jobs[job_id]["status"] = "processing"
+        jobs[job_id]["progress"] = 0
+
+        total_duration = get_video_duration_ms(file_path)
+
+        x, y, w, h = box["x"], box["y"], box["w"], box["h"]
+
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", file_path,
+            "-filter_complex",
+            f"[0:v]split=2[base][tmp];"
+            f"[tmp]crop={w}:{h}:{x}:{y},boxblur=10:2[blur];"
+            f"[base][blur]overlay={x}:{y}",
+            "-map", "0:a?",
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-crf", "23",
+            "-progress", "pipe:1",
+            output_path
+        ]
+
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True
+        )
+
+        for line in process.stdout:
+            if "out_time_ms=" in line:
+                out_ms = int(line.strip().split("=")[1])
+                percent = min(int(out_ms * 100 / total_duration), 99)
+                jobs[job_id]["progress"] = percent
+
+        process.wait()
+
+        if not os.path.exists(output_path):
+            raise Exception("Output file not created")
+
+        jobs[job_id]["progress"] = 100
+        jobs[job_id]["status"] = "done"
+        jobs[job_id]["output_file"] = os.path.basename(output_path)
+
+    except Exception as e:
+        jobs[job_id]["status"] = "error"
+        jobs[job_id]["message"] = str(e)
+
+@app.route("/process-mobile", methods=["POST", "OPTIONS"])
+def process_mobile():
+    if request.method == "OPTIONS":
+        return make_response("", 200)
+
+    data = request.get_json()
+    file_name = data.get("file_name")
+    coordinates = data.get("coordinates")
+
+    if not file_name or not coordinates:
+        return jsonify({"error": "Invalid data"}), 400
+
+    # 🔥 Mobile = single box only
+    box = coordinates[0]
+
+    input_path = os.path.join(UPLOAD_DIR, file_name)
+    output_name = f"mobile_blur_{uuid.uuid4().hex}.mp4"
+    output_path = os.path.join(PROCESSED_DIR, output_name)
+
+    job_id = uuid.uuid4().hex
+
+    jobs[job_id] = {
+        "status": "queued",
+        "progress": 0,
+        "output_file": None
+    }
+
+    thread = threading.Thread(
+        target=process_video_mobile,
+        args=(job_id, input_path, box, output_path)
+    )
+    thread.start()
+
+    return jsonify({
+        "status": "started",
+        "job_id": job_id
+    }), 200
+
+@app.route("/progress/<job_id>")
+def get_progress(job_id):
+    job = jobs.get(job_id)
+    if not job:
+        return jsonify({"error": "Invalid job id"}), 404
+    return jsonify(job)
+
+# Mobile Processing Code ==============================
+
 
 
 @app.route("/process", methods=["POST", "OPTIONS"])
